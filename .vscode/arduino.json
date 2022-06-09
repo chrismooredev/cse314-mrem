@@ -1,0 +1,8 @@
+{
+    "board": "arduino:avr:mega",
+    "sketch": "cse314-mrem.ino",
+    "port": "COM5",
+    "programmer": "arduino:avrisp",
+    "output": "build/",
+    "configuration": "cpu=atmega2560"
+}
