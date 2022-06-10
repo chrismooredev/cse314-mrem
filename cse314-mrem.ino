@@ -1,35 +1,3 @@
-/**
- * \par Copyright (C), 2012-2016, MakeBlock
- * @file    Me_Auriga_encoder.ino
- * @author  MakeBlock
- * @version V1.0.0
- * @date    2016/07/14
- * @brief   Description: this file is sample code for auriga encoder motor
- * device.
- *
- * Function List:
- *    1. uint8_t MeEncoderOnBoard::getPortB(void);
- *    2. uint8_t MeEncoderOnBoard::getIntNum(void);
- *    3. void MeEncoderOnBoard::pulsePosPlus(void);
- *    4. void MeEncoderOnBoard::pulsePosMinus(void);
- *    5. void MeEncoderOnBoard::setMotorPwm(int pwm);
- *    6. double MeEncoderOnBoard::getCurrentSpeed(void);
- *    7. void MeEncoderOnBoard::setSpeedPid(float p,float i,float d);
- *    8. void MeEncoderOnBoard::setPosPid(float p,float i,float d);
- *    7. void MeEncoderOnBoard::setPosPid(float p,float i,float d);
- *    8. void MeEncoderOnBoard::setPulse(int16_t pulseValue);
- *    9. void MeEncoderOnBoard::setRatio(int16_t RatioValue);
- *    10. void MeEncoderOnBoard::moveTo(long position,float speed,int16_t
- * extId,cb callback);
- *    11. void MeEncoderOnBoard::loop(void);
- *    12. long MeEncoderOnBoard::getCurPos(void);
- *
- * \par History:
- * <pre>
- * <Author>     <Time>        <Version>      <Descr>
- * Mark Yan     2016/07/14    1.0.0          build the new
- * </pre>
- */
 
 #include <MeAuriga.h>
 #include <SoftwareSerial.h>
@@ -49,8 +17,6 @@ CommandBuffer ser(&Serial, 0, 10, 10);
 CommandBuffer ble(&bte, 0, 0, 10);
 CommandBuffer *bufs[2] = { &ser, &ble };
 
-// StreamEx serial(Serial);
-
 void isr_process_encoder(uint8_t ind) {
 	MeEncoderOnBoard *motor = MOTORS[ind];
 	if (digitalRead(motor->getPortB()) == 0) {
@@ -63,6 +29,7 @@ void isr_process_encoder_left(void) { isr_process_encoder(0); }
 void isr_process_encoder_rigt(void) { isr_process_encoder(1); }
 
 void motor_done(int16_t motor, int16_t ext) {
+	// report back to the initiator that the motor has finished moving
 	CommandBuffer *out = ext == 0 ? &ser : &ble;
 	out->print("!MotorDone,");
 	switch(motor) {
@@ -78,7 +45,7 @@ void setup() {
 	attachInterrupt(MOTOR_RIGT.getIntNum(), isr_process_encoder_rigt, RISING);
 	Serial.begin(115200);
 	bte.begin(115200);
-    led_ring.setpin(44);
+	led_ring.setpin(44);
 
 	// Set PWM 8KHz
 	TCCR1A = _BV(WGM10);
@@ -109,6 +76,7 @@ void setup() {
     led_ring.show();
 }
 
+// cold to clear LED status lights using the ring above
 unsigned long clear_ring_at[13] = {0};
 void set_ring_led(uint8_t i, unsigned long length, uint8_t r, uint8_t g, uint8_t b) {
 	led_ring.setColor(i, r, g, b);
@@ -119,13 +87,11 @@ void loop() {
 	process_commander(&ser); // process commands over serial
 	process_commander(&ble); // process commands over bluetooth
 
+	// update motors as necessary
 	MOTOR_LEFT.loop();
 	MOTOR_RIGT.loop();
 
-	float lspeed = MOTOR_LEFT.getCurrentSpeed();
-	float rspeed = MOTOR_RIGT.getCurrentSpeed();
-
-	if(lspeed > 0 && rspeed > 0) {
+	if(lspeed > 0 && rspeed > 0) { // log any movement
 		for(int i = 0; i < sizeof(bufs)/sizeof(bufs[0]); i++) {
 			bufs[i]->print("Speeds=(%f,%f)  Positions=(%ld,%ld)\n",
 				MOTOR_LEFT.getCurrentSpeed(), MOTOR_RIGT.getCurrentSpeed(),
@@ -134,6 +100,7 @@ void loop() {
 		}
 	}
 
+	// clear applicable LED lights
 	for(size_t i = 0; i < 12; ++i) {
 		if(clear_ring_at[i] != 0 && clear_ring_at[i] < millis()) {
 			clear_ring_at[i] = 0;
@@ -143,6 +110,7 @@ void loop() {
 	}
 }
 
+// read in and process commands over a serial channel (USB, BLE)
 void process_commander(CommandBuffer *cmdbuf) {
 	cmdbuf->read();
 	size_t cmds_len;
@@ -150,8 +118,10 @@ void process_commander(CommandBuffer *cmdbuf) {
 	process_cmd(cmdbuf, cmds, cmds_len);
 }
 
+// process any input commands
 void process_cmd(CommandBuffer *cmdbuf, char** cmds, size_t cmds_len) {
 	if(cmds && cmds_len > 0) {
+		// for debug - flash an LED if a message came in, according to which channel
 		if(cmdbuf == &ser) {
 			set_ring_led(1, 500, 10, 0, 0);
 		} else if(cmdbuf == &ble) {
@@ -164,6 +134,9 @@ void process_cmd(CommandBuffer *cmdbuf, char** cmds, size_t cmds_len) {
 		// }
 		// cmdbuf->printf("\n");
 
+		// Move,left_deg,right_deg[,left_speed,right_speed]
+		// Stop
+		// QueryDistanceCM
 		if(strcmp(cmds[0], "Move") == 0) {
 			if(cmds_len == 3 || cmds_len == 5) {
 				long left = strtol(cmds[1], nullptr, 10);
